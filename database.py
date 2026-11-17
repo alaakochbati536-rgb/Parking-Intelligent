@@ -73,3 +73,22 @@ def enregistrer_sortie(plaque):
 
 
 creer_tables()
+CAPACITE_PARKING = 50
+
+
+def obtenir_statistiques():
+    connexion = connecter()
+    curseur = connexion.cursor()
+
+    curseur.execute("""
+        SELECT COUNT(*)
+        FROM vehicules
+        WHERE statut = 'Present'
+    """)
+
+    places_occupees = curseur.fetchone()[0]
+    places_disponibles = CAPACITE_PARKING - places_occupees
+
+    connexion.close()
+
+    return CAPACITE_PARKING, places_occupees, places_disponibles

@@ -1,15 +1,34 @@
 import tkinter as tk
-from tkinter import messagebox
-import database
+from tkinter import messagebox, filedialog, ttk
+from datetime import datetime
 
+import database
+import pytesseract
+import cv2
+from ultralytics import YOLO
+
+
+# Configuration Tesseract
+pytesseract.pytesseract.tesseract_cmd = (
+    r"C:\Program Files\Tesseract-OCR\tesseract.exe"
+)
+
+# Chargement du modèle YOLO
+modele = YOLO("plate_detector.pt")
+
+
+# Couleurs
 BG = "#F4F6F9"
 BLUE = "#1E3A5F"
 WHITE = "#FFFFFF"
 
+
+# Fenêtre principale
 fenetre = tk.Tk()
 fenetre.title("Parking Intelligent")
 fenetre.geometry("1100x700")
 fenetre.configure(bg=BG)
+
 
 # Menu gauche
 menu = tk.Frame(fenetre, bg=BLUE, width=230)
@@ -28,12 +47,117 @@ contenu = tk.Frame(fenetre, bg=BG)
 contenu.pack(side="right", fill="both", expand=True)
 
 
+# Vider le contenu de la page
 def vider_page():
     for widget in contenu.winfo_children():
         widget.destroy()
 
 
+# Détection et lecture de la plaque
+def lire_plaque_image(champ):
+
+    chemin = filedialog.askopenfilename(
+        title="Choisir une image",
+        filetypes=[
+            ("Images", "*.jpg *.jpeg *.png *.bmp")
+        ]
+    )
+
+    if not chemin:
+        return
+
+    image = cv2.imread(chemin)
+
+    if image is None:
+        messagebox.showerror(
+            "Erreur",
+            "Impossible de lire cette image."
+        )
+        return
+
+    # Détection de la plaque avec YOLO
+    resultats = modele.predict(
+        image,
+        conf=0.25,
+        verbose=False
+    )
+
+    boites = resultats[0].boxes
+
+    if boites is None or len(boites) == 0:
+        messagebox.showwarning(
+            "Attention",
+            "Aucune plaque détectée !"
+        )
+        return
+
+    # Sélection de la meilleure détection
+    index = int(boites.conf.argmax())
+
+    x1, y1, x2, y2 = map(
+        int,
+        boites.xyxy[index].tolist()
+    )
+
+    # Extraction de la plaque
+    plaque_image = image[y1:y2, x1:x2]
+
+    if plaque_image.size == 0:
+        messagebox.showerror(
+            "Erreur",
+            "Impossible d'extraire la plaque."
+        )
+        return
+
+    # Amélioration de la qualité
+    plaque_image = cv2.resize(
+        plaque_image,
+        None,
+        fx=3,
+        fy=3,
+        interpolation=cv2.INTER_CUBIC
+    )
+
+    gris = cv2.cvtColor(
+        plaque_image,
+        cv2.COLOR_BGR2GRAY
+    )
+
+    # Reconnaissance OCR
+    configuration = (
+        "--psm 7 "
+        "-c tessedit_char_whitelist="
+        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz-"
+    )
+
+    texte = pytesseract.image_to_string(
+        gris,
+        config=configuration
+    )
+
+    texte = texte.strip().replace(" ", "").replace("\n", "")
+
+    if not texte:
+        messagebox.showwarning(
+            "Attention",
+            "La plaque est détectée mais le texte est illisible."
+        )
+        return
+
+    # Affichage du résultat
+    champ.delete(0, tk.END)
+    champ.insert(0, texte.upper())
+
+    messagebox.showinfo(
+        "Résultat OCR",
+        "Plaque détectée : " + texte.upper()
+        + "\n\nVérifiez le numéro avant l'enregistrement."
+    )
+
+
+# Tableau de bord
 def afficher_dashboard():
+
     vider_page()
 
     tk.Label(
@@ -44,28 +168,49 @@ def afficher_dashboard():
         fg=BLUE
     ).pack(pady=30)
 
-    connexion = database.connecter()
-    curseur = connexion.cursor()
+    total, occupees, disponibles = database.obtenir_statistiques()
 
-    curseur.execute(
-        "SELECT COUNT(*) FROM vehicules WHERE statut='Present'"
-    )
-    presents = curseur.fetchone()[0]
+    statistiques = [
+        ("Capacité totale", total),
+        ("Places occupées", occupees),
+        ("Places disponibles", disponibles)
+    ]
 
-    connexion.close()
+    zone = tk.Frame(contenu, bg=BG)
+    zone.pack(fill="x", padx=20, pady=30)
 
-    tk.Label(
-        contenu,
-        text=f"Véhicules présents : {presents}",
-        font=("Arial", 18, "bold"),
-        bg=WHITE,
-        fg=BLUE,
-        padx=40,
-        pady=30
-    ).pack(pady=30)
+    for titre, valeur in statistiques:
+
+        carte = tk.Frame(
+            zone,
+            bg=WHITE,
+            width=200,
+            height=140
+        )
+
+        carte.pack(side="left", padx=15, expand=True)
+        carte.pack_propagate(False)
+
+        tk.Label(
+            carte,
+            text=titre,
+            font=("Arial", 13),
+            bg=WHITE,
+            fg=BLUE
+        ).pack(pady=(25, 10))
+
+        tk.Label(
+            carte,
+            text=str(valeur),
+            font=("Arial", 25, "bold"),
+            bg=WHITE,
+            fg=BLUE
+        ).pack()
 
 
+# Entrée d'un véhicule
 def afficher_entree():
+
     vider_page()
 
     tk.Label(
@@ -83,25 +228,46 @@ def afficher_entree():
         bg=BG
     ).pack(pady=10)
 
-    plaque = tk.Entry(contenu, font=("Arial", 16), width=25)
+    plaque = tk.Entry(
+        contenu,
+        font=("Arial", 16),
+        width=25
+    )
     plaque.pack(pady=10)
 
+    tk.Button(
+        contenu,
+        text="Choisir une image et lire la plaque",
+        font=("Arial", 12),
+        bg="#2874A6",
+        fg=WHITE,
+        command=lambda: lire_plaque_image(plaque)
+    ).pack(pady=10)
+
     def enregistrer():
+
         numero = plaque.get().strip()
 
         if not numero:
-            messagebox.showwarning("Attention", "Saisir la plaque !")
+            messagebox.showwarning(
+                "Attention",
+                "Saisir la plaque !"
+            )
             return
 
         resultat = database.enregistrer_entree(numero)
 
         if resultat:
+
             messagebox.showinfo(
                 "Succès",
                 "Entrée enregistrée avec succès !"
             )
+
             plaque.delete(0, tk.END)
+
         else:
+
             messagebox.showwarning(
                 "Attention",
                 "Ce véhicule est déjà présent !"
@@ -117,7 +283,9 @@ def afficher_entree():
     ).pack(pady=20)
 
 
+# Sortie d'un véhicule
 def afficher_sortie():
+
     vider_page()
 
     tk.Label(
@@ -135,25 +303,46 @@ def afficher_sortie():
         bg=BG
     ).pack(pady=10)
 
-    plaque = tk.Entry(contenu, font=("Arial", 16), width=25)
+    plaque = tk.Entry(
+        contenu,
+        font=("Arial", 16),
+        width=25
+    )
     plaque.pack(pady=10)
 
+    tk.Button(
+        contenu,
+        text="Choisir une image et lire la plaque",
+        font=("Arial", 12),
+        bg="#2874A6",
+        fg=WHITE,
+        command=lambda: lire_plaque_image(plaque)
+    ).pack(pady=10)
+
     def enregistrer():
+
         numero = plaque.get().strip()
 
         if not numero:
-            messagebox.showwarning("Attention", "Saisir la plaque !")
+            messagebox.showwarning(
+                "Attention",
+                "Saisir la plaque !"
+            )
             return
 
         resultat = database.enregistrer_sortie(numero)
 
         if resultat:
+
             messagebox.showinfo(
                 "Succès",
                 "Sortie enregistrée avec succès !"
             )
+
             plaque.delete(0, tk.END)
+
         else:
+
             messagebox.showwarning(
                 "Attention",
                 "Véhicule introuvable dans le parking !"
@@ -169,7 +358,9 @@ def afficher_sortie():
     ).pack(pady=20)
 
 
+# Historique des véhicules
 def afficher_historique():
+
     vider_page()
 
     tk.Label(
@@ -183,9 +374,13 @@ def afficher_historique():
     tableau = tk.Frame(contenu, bg=BG)
     tableau.pack(fill="both", expand=True, padx=20, pady=10)
 
-    colonnes = ("Plaque", "Entrée", "Sortie", "Statut")
-
-    from tkinter import ttk
+    colonnes = (
+        "Plaque",
+        "Entrée",
+        "Sortie",
+        "Durée",
+        "Statut"
+    )
 
     liste = ttk.Treeview(
         tableau,
@@ -195,7 +390,7 @@ def afficher_historique():
 
     for colonne in colonnes:
         liste.heading(colonne, text=colonne)
-        liste.column(colonne, width=150)
+        liste.column(colonne, width=140)
 
     liste.pack(fill="both", expand=True)
 
@@ -208,8 +403,39 @@ def afficher_historique():
         ORDER BY id DESC
     """)
 
-    for ligne in curseur.fetchall():
-        liste.insert("", tk.END, values=ligne)
+    for plaque, entree, sortie, statut in curseur.fetchall():
+
+        date_entree = datetime.strptime(
+            entree,
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        if sortie:
+            date_sortie = datetime.strptime(
+                sortie,
+                "%Y-%m-%d %H:%M:%S"
+            )
+        else:
+            date_sortie = datetime.now()
+
+        duree = date_sortie - date_entree
+
+        heures = int(duree.total_seconds() // 3600)
+        minutes = int((duree.total_seconds() % 3600) // 60)
+
+        duree_texte = f"{heures} h {minutes} min"
+
+        liste.insert(
+            "",
+            tk.END,
+            values=(
+                plaque,
+                entree,
+                sortie if sortie else "-",
+                duree_texte,
+                statut
+            )
+        )
 
     connexion.close()
 
@@ -223,6 +449,7 @@ pages = [
 ]
 
 for nom, fonction in pages:
+
     tk.Button(
         menu,
         text=nom,
@@ -237,6 +464,7 @@ for nom, fonction in pages:
     ).pack(fill="x", padx=8, pady=5)
 
 
+# Lancement de l'application
 afficher_dashboard()
 
 fenetre.mainloop()
