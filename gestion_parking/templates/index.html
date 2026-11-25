@@ -1,0 +1,147 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Parking Intelligent</title>
+
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body>
+
+    <!-- En-tete -->
+    <header>
+        <h1>🚗 PARKING INTELLIGENT</h1>
+        <p>Gestion automatique des véhicules et reconnaissance des plaques tunisiennes</p>
+    </header>
+
+    <!-- Menu -->
+    <nav>
+        <a href="#accueil">Accueil</a>
+        <a href="#camera">Caméra</a>
+        <a href="#pointage">Pointage</a>
+        <a href="#historique">Historique</a>
+    </nav>
+
+    <main>
+
+        <!-- Statistiques -->
+        <section class="statistiques" id="accueil">
+
+            <div class="stat-card">
+                <h3>Véhicules présents</h3>
+                <p id="total-voitures">0</p>
+            </div>
+
+            <div class="stat-card">
+                <h3>Entrées</h3>
+                <p id="total-entrees">0</p>
+            </div>
+
+            <div class="stat-card">
+                <h3>Sorties</h3>
+                <p id="total-sorties">0</p>
+            </div>
+
+        </section>
+
+        <!-- Camera et informations -->
+        <section class="dashboard">
+
+            <div class="carte" id="camera">
+
+                <h2>Caméra de surveillance</h2>
+
+                <div class="camera-screen">
+
+                    <video id="video" autoplay playsinline></video>
+
+                    <p id="camera-message">
+                        Caméra non activée
+                    </p>
+
+                </div>
+
+                <button class="btn-blue" onclick="ouvrirCamera()">
+                    Ouvrir la caméra
+                </button>
+
+            </div>
+
+            <div class="carte" id="pointage">
+
+                <h2>Informations du véhicule</h2>
+
+                <label>Numéro de plaque :</label>
+
+                <input
+                    type="text"
+                    id="plaque"
+                    placeholder="Exemple : 123 تونس 4567"
+                >
+
+                <label>Date :</label>
+
+                <input type="text" id="date" readonly>
+
+                <label>Heure :</label>
+
+                <input type="text" id="heure" readonly>
+
+                <button class="btn-green" onclick="pointer('entree')">
+                    Enregistrer l'entrée
+                </button>
+
+                <button class="btn-red" onclick="pointer('sortie')">
+                    Enregistrer la sortie
+                </button>
+
+            </div>
+
+        </section>
+
+        <!-- Historique -->
+        <section class="historique carte" id="historique">
+
+            <h2>Historique des véhicules</h2>
+
+            <table>
+
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Numéro de plaque</th>
+                        <th>Date d'entrée</th>
+                        <th>Date de sortie</th>
+                        <th>Durée</th>
+                        <th>Statut</th>
+                    </tr>
+                </thead>
+
+                <tbody id="liste">
+
+                </tbody>
+
+            </table>
+
+        </section>
+
+    </main>
+
+    <!-- Pied de page -->
+    <footer>
+        <p>
+            Parking Intelligent © 2026
+            | Application de gestion de parking
+        </p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='script.js') }}"></script>
+
+</body>
+</html>
+
